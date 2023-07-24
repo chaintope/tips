@@ -12,7 +12,6 @@ License: CC0
 
 This document describes the did numbering method for using Tapyrus as a Verifiable Data Registry.
 
----
 このドキュメントでは、Tapyrusを検証可能なデータレジストリとして使用するための DIDの採番方法ついて説明します。
 
 ## Motivation
@@ -20,7 +19,6 @@ If Tapyrus can issue IDs that comply with the [DID specifications](https://www.w
 
 Also, it is often used by mapping the Tapyrus address to a certain Entity. For example, when using address as the company's ID. In this case, DID Document can be obtained by expressing Tapyrus address as DID instead of using address directly. This makes the ID verifiable and allows Tapyrus addresses to be conveniently mapped for various uses.
 
----
 TapyrusがW3C Credentials Community Groupが策定した [DID仕様](https://www.w3.org/TR/did-core/)に準拠した ID を発行できれば、例えば Verifiable Credentials やその他の分散 ID を利用するさまざまなアプリケーションに Tapyrus を利用することが可能になります。
 
 また、Tapyrus アドレスを特定の Entity にマッピングして使用することがよくあります。たとえば、会社の ID としてaddressを使用する場合です。この場合、addressを直接使用するのではなく、Tapyrus addressを DID として表現することで DID Document を取得できます。これにより、ID が検証可能になり、Tapyrus addressをさまざまな用途に簡単にマッピングできるようになります。
@@ -36,7 +34,6 @@ Basically, it follows the specification of `did:btcr`, but some items extended b
 
 `did:tprs` is expressed using the TxRef format. This restriction imposes some inconvenience that the DID must be recorded on-chain, but the trade-off is that the DID is guaranteed to exist.
 
----
 Tapyrus DID Method(`did:tprs`)はTapyrus Blockchainを用いてDIDを表現する。これにより、エンタープライズ向けに提供される各種サービスにおいて、そのサービスの対象者に固有のIDを付与することが可能となる。
 
 `did:tprs`の第２の目的として、任意のsubjectに対してIDを付与することも可能とする。これにより、いわゆるNFTや任意のドキュメント、画像データなど人格を有しないものに対しても固有のIDが付与でき、Verifiable Credentialの対象とすることが可能となる([WIP])。
@@ -60,7 +57,6 @@ However, in Tapyrus there are multiple networks, and they are identified by thei
 Reserved Bit is for adjusting the bit column after Version to be the same as `did:btcr`. Future use should be fully considered.
 Also, while [BIP-0136](https://github.com/bitcoin/bips/blob/master/bip-0136.mediawiki) refers to tx input, this specification refers to tx output.
 
----
 `did:btcr`と同様に`did:tprs`では[BIP-0136,Bech32 Encoded Transaction Position References.](https://github.com/bitcoin/bips/blob/master/bip-0136.mediawiki) エンコーディングを用いて識別子を組み立てる。
 ただし、Tapyrusでは複数のネットワークが存在し、それらはNetwork IDで識別されるためTxRefの対象のパラメータを拡張する。以下の表3-1に示す。
 なお、Reserved BitはVersion以降のbit列が`did:btcr`と同じになるように調整するためのものである。将来的な利用については十分な検討が必要。
@@ -68,14 +64,14 @@ Also, while [BIP-0136](https://github.com/bitcoin/bips/blob/master/bip-0136.medi
 
 * Table 3-1. Parameters for TxRef
 
-| | description | possible type | # ob Bits used | values |
-|----|----|----|----|----| 
-| Network ID | Tapyrusのネットワークを識別するID。 | Uint32 | 32 | 0 to 4294967296 <br/> ex)Tapyrus API Network = 1 |
-| Reserved Bit | bit列の調整のため | Uint8 | 3 | 0 固定 |
-| Version | 将来的に利用 | Uint8 | 1 | 0 固定 |
-| Block Height | Txを含むBlockの高さ | Uint32 | 24 | Block 0 to Block 16777215 |
-| Transaction Index | DIDを含むTxのブロックの中の位置 | Uint16 | 15 | Tx 0 to Tx 32767 |
-| Output Index | DIDとなるTx outputの位置 | Uint16 | 15 | Tx 0 to Tx 32767 |
+| | description                            | possible type | # ob Bits used | values |
+|----|----------------------------------------|----|----|----| 
+| Network ID | Identifier of Tapyrus Network          | Uint32 | 32 | 0 to 4294967296 <br/> ex)Tapyrus API Network = 1 |
+| Reserved Bit | for adjusting bits                     | Uint8 | 3 | 0 固定 |
+| Version | future use                             | Uint8 | 1 | 0 固定 |
+| Block Height | The Block Height including Tx          | Uint32 | 24 | Block 0 to Block 16777215 |
+| Transaction Index | Position in block of Tx containing DID | Uint16 | 15 | Tx 0 to Tx 32767 |
+| Output Index | Position of Tx output as DID           | Uint16 | 15 | Tx 0 to Tx 32767 |
 
 
 
@@ -83,7 +79,6 @@ Also, while [BIP-0136](https://github.com/bitcoin/bips/blob/master/bip-0136.medi
 
 Convert 5bit data to a string using the same encoding table as Bech32m in [BIP-0350](https://github.com/bitcoin/bips/blob/master/bip-0350.mediawiki). The 32 characters to be mapped are as follows.
 
----
 [BIP-0350](https://github.com/bitcoin/bips/blob/master/bip-0350.mediawiki)のBech32mと同じエンコーディング表を用いて5bitデータを文字列に変換する。マッピングする32文字は以下の通り。
 
 Table 3-2. Conversion Table to String
@@ -111,7 +106,6 @@ Finally, after calculating the checksum of the above 5-bit numeric array, conver
 
 A sample code is shown in List 3-1 below.
 
----
 表3-1に示すピースについてTxRef文字列に変換するアルゴリズムを示す。
 
 最初に以下の順序で5bit数値の配列を生成する。
@@ -149,17 +143,16 @@ def bech32_encoding(network_id, block_height, tx_index, out_index):
 
 An example of TxRef for Network ID #1, Transaction Index #1234, Block Height #456789, Output Index #0 is shown below.
 
----
 Network ID #1、Transaction Index #1234、Block Height #456789、Output Index #0の場合のTxRefの例を以下に示す。
 
-| | Decimal Value | Binary Value | # of Bits Used |  Bit Index and Value |
-|---|---|---|---|---|
-| Network ID | 1 | 00000000<br/>00000000<br/>00000000<br/>00000001<br/> | 32 | (ni31, ni30, ni29, ni28, ni27) = (0, 0, 0, 0, 0)<br/>(ni26, ni25, ni24, ni23, ni22) = (0, 0, 0, 0, 0)<br/>(ni21, ni20, ni19, ni18, ni17) = (0, 0, 0, 0, 0)<br/>(ni16, ni15, ni14, ni13, ni12) = (0, 0, 0, 0, 0)<br/>(ni11, ni10, ni09, ni08, ni07) = (0, 0, 0, 0, 0)<br/>(ni06, ni05, ni04, ni03, ni02) = (0, 0, 0, 0, 0)<br/>(ni01, ni00)                           = (0, 1) |
-| Reserved Bit | 0 | 00000000 | 3 | (rb02, rb01, rb00) = (0, 0, 0) |
-| Version | 0 | 00000000 | 1 | (vr00) = (0) |
-| Block height | 456789 | 00000110<br/>11111000<br/>01010101<br/> | 24 | (bh23, bh22, bh21, bh20)           = (0, 0, 0, 0)<br/>(bh19, bh18, bh17, bh16, bh15) = (0, 1, 1, 0, 1)<br/>(bh14, bh13, bh12, bh11, bh10) = (1, 1, 1, 1, 0)<br/>(bh09, bh08, bh07, bh06, bh05) = (0. 0. 0. 1. 0)<br/>(bh04, bh03, bh02, bh01, bh00) = (1, 0, 1, 0, 1)<br/> |
-| Transaction index | 1234 | 00000100<br/>11010010 | 15 | (ti14, ti13, ti12, ti11, ti10) = (0, 0, 0, 0, 1)<br/>(ti09, ti08, ti07, ti06, ti05) = (0, 0, 1, 1, 0)<br/>(ti04, ti03, ti02, ti01, ti00) = (1, 0, 0, 1, 0)<br/> |
-| Output index | 0 | 省略 | 省略 | 省略 |
+| | Decimal Value | Binary Value                                        | # of Bits Used | Bit Index and Value                                                                                                                                                                                                                                                                                                                                                           |
+|---|---|-----------------------------------------------------|----------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| Network ID | 1 | 00000000<br/>00000000<br/>00000000<br/>00000001<br/> | 32             | (ni31, ni30, ni29, ni28, ni27) = (0, 0, 0, 0, 0)<br/>(ni26, ni25, ni24, ni23, ni22) = (0, 0, 0, 0, 0)<br/>(ni21, ni20, ni19, ni18, ni17) = (0, 0, 0, 0, 0)<br/>(ni16, ni15, ni14, ni13, ni12) = (0, 0, 0, 0, 0)<br/>(ni11, ni10, ni09, ni08, ni07) = (0, 0, 0, 0, 0)<br/>(ni06, ni05, ni04, ni03, ni02) = (0, 0, 0, 0, 0)<br/>(ni01, ni00)                           = (0, 1) |
+| Reserved Bit | 0 | 00000000                                            | 3              | (rb02, rb01, rb00) = (0, 0, 0)                                                                                                                                                                                                                                                                                                                                                |
+| Version | 0 | 00000000                                            | 1              | (vr00) = (0)                                                                                                                                                                                                                                                                                                                                                                  |
+| Block height | 456789 | 00000110<br/>11111000<br/>01010101<br/>             | 24             | (bh23, bh22, bh21, bh20)           = (0, 0, 0, 0)<br/>(bh19, bh18, bh17, bh16, bh15) = (0, 1, 1, 0, 1)<br/>(bh14, bh13, bh12, bh11, bh10) = (1, 1, 1, 1, 0)<br/>(bh09, bh08, bh07, bh06, bh05) = (0. 0. 0. 1. 0)<br/>(bh04, bh03, bh02, bh01, bh00) = (1, 0, 1, 0, 1)<br/>                                                                                                    |
+| Transaction index | 1234 | 00000100<br/>11010010                               | 15             | (ti14, ti13, ti12, ti11, ti10) = (0, 0, 0, 0, 1)<br/>(ti09, ti08, ti07, ti06, ti05) = (0, 0, 1, 1, 0)<br/>(ti04, ti03, ti02, ti01, ti00) = (1, 0, 0, 1, 0)<br/>                                                                                                                                                                                                               |
+| Output index | 0 | omit                                                | omit           | omit                                                                                                                                                                                                                                                                                                                                                                          |
 
 | | ni01 | ni00 | rb02 | rb01 | rb00 | decimal value | encoding char |
 |---|---|---|---|---|---|---|---|
@@ -235,7 +228,6 @@ check_sum=['p', 'k', '2', 'f', 'u', 'x']
 
 The final TxRef will be the following string:
 
----
 最後に[BIP-0350](https://github.com/bitcoin/bips/blob/master/bip-0350.mediawiki), Bech32m形式のChecksumを付与する。Checksumとして次の6文字が得られる。
 check_sum=['p', 'k', '2', 'f', 'u', 'x']
 
@@ -253,7 +245,6 @@ As with `did:btcr`, `did:tprs` also excludes Prefix defined in [BIP-0173](https:
 
 As with `did:btcr`, `did:tprs` only uses abbreviations when the Output Index is 0. For example:
 
----
 `did:btcr`と同様に`did:tprs`でも[BIP-0173](https://github.com/bitcoin/bips/blob/master/bip-0173.mediawiki)で定義されているPrefixを除外する。
 
 **Output Index=0の時の表現のあいまいさの排除**
@@ -282,7 +273,6 @@ gqqqqqqx6t8q2qqzqqeeq68h
 
 A DID Resolver MUST reject a DID if it detects an invalid format.
 
----
 DID Resolverは無効なformatを検出した場合はDIDを拒否しなければならない。
 
 #### 3.2. TPRS DID Format
@@ -311,7 +301,6 @@ For `did:tprs`, the DID resolver needs to generate the DID document from the tra
 - authentication
 - Sign to Verifiable Credential(assertionMethod)
 
----
 `did:tprs`に対して、DID リゾルバーはトランザクション自体から DID ドキュメントを生成する必要がある。具体的にはUnspent Transaction Outputに含まれる公開鍵に次の機能を付与する。
 
 - 認証(authentication)
@@ -320,32 +309,32 @@ For `did:tprs`, the DID resolver needs to generate the DID document from the tra
 * Example) DETAILED EXAMPLE OF DEFAULT CAPABILITIES
 ```
 {
-   "@context": ["https://www.w3.org/ns/did/v1", "https://w3id.org/security/suites/jws-2020/v1"],
-   "id": "did:tprs:gqqq-qqqx-6t8q-2qql-lpff-y",
-   "verificationMethod": [
-      {
-         "id": "did:tprs:gqqq-qqqx-6t8q-2qql-lpff-y#address-0",
-         "controller": "did:tprs:gqqq-qqqx-6t8q-2qql-lpff-y",
-         "publicKeyJwk": {
-            "kty": "EC",
-            "crv": "secp256k1",
-            "x": "38M1FDts7Oea7urmseiugGW7tWc3mLpJh6rKe7xINZ8",
-            "y": "nDQW6XZ7b_u2Sy9slofYLlG03sOEoug3I0aAPQ0exs4"
-         }
+  "@context": [
+    "https://www.w3.org/ns/did/v1",
+    "https://w3id.org/security/suites/jws-2020/v1"
+  ],
+  "id": "did:tprs:gqqq-qqqx-6t8q-2qql-lpff-y",
+  "verificationMethod": [
+    {
+      "id": "did:tprs:gqqq-qqqx-6t8q-2qql-lpff-y#HR6tZUxowdmr7F7eSh6Qr3zfpoGczZanJQn6Nu_QiFM",
+      "type": "EcdsaSecp256k1VerificationKey2019",
+      "controller": "did:tprs:gqqq-qqqx-6t8q-2qql-lpff-y",
+      "publicKeyJwk": {
+        "kty": "EC",
+        "crv": "secp256k1",
+        "x": "NQJZqt9UgxBW0VCPIrR_hDZH-uh0z-HzBbOwxIC3ZOY",
+        "y": "IgiHuaCq184PNRESJAB408p7MFgu4R7C0Kf80fcOjFQ",
+        "kid": "HR6tZUxowdmr7F7eSh6Qr3zfpoGczZanJQn6Nu_QiFM"
       }
-   ],
-   "authentication": [
-      "did:tprs:gqqq-qqqx-6t8q-2qql-lpff-y#address-0"
-   ],
-   "assertionMethod": [
-      "did:tprs:gqqq-qqqx-6t8q-2qql-lpff-y#address-0"
-   ]
+    }
+  ],
+  "authentication": ["did:tprs:gqqq-qqqx-6t8q-2qql-lpff-y#HR6tZUxowdmr7F7eSh6Qr3zfpoGczZanJQn6Nu_QiFM"],
+  "assertionMethod": ["did:tprs:gqqq-qqqx-6t8q-2qql-lpff-y#HR6tZUxowdmr7F7eSh6Qr3zfpoGczZanJQn6Nu_QiFM"]
 }
 ```
 
 Like `did:btcr`, `did:tprs` will generate a document if it transaction is UTXO. If the TPRS DID's transaction is spent (SPENT), we need to follow the transaction chain and look for an unused tip tx.
 
----
 `did:btcr`と同様に`did:tprs`ではトランザクションが未使用の場合に、ドキュメントが生成される。TPRS DIDのトランザクションが使用済み(SPENT)の場合は、トランザクションチェーンをたどり、未使用のtip txを探す必要がある。
 
 #### 3.4. Continuation DID Documents
@@ -357,7 +346,6 @@ Like `did:btcr`, `did:tprs` will generate a document if it transaction is UTXO. 
 
 Since `did:tprs` assumes a wider range of users, it is designed with a focus on security risks.
 
----
 `did:tprs`では`did:btcr`で定義されているDDO(DID Descriptor Object)は保有しない。`did:tprs`はトランザクションのみからDID Documentを生成する。以下の点を考慮してこの仕様を採用した。
 
 - OP_RETURNにURLを記載することはブロックの容量増加に繋がる。
@@ -392,7 +380,6 @@ It is possible to create multiple `did:tprs` with one tx by having multiple P2PK
 
 coinbase TX output is not `did:tprs`.
 
----
 `did:tprs`はこのセクションで説明する仕様に則った、Tapyrusトランザクションを作成することで作成される。P2PK(Pay-to-PublicKey) コントラクトを持つTx outputが`did:tprs`として利用可能である。
 
 **略語:**
@@ -430,7 +417,6 @@ coinbase TX outputは`did:tprs`ではない。
 
 **NO**: Find tip tx that is both P2PK and UTXO. After that, generate and return the public key of tip tx as a DID Document. If the P2PK UTXO is not found, treat the DID as revoked.
 
----
 1. `did:tprs`からTxRef（did:tprs:TxRef(TX1)のTxRef(TX1)部分）を抽出する。
 2. トランザクションを検索する。
 3. outputはUTXOかチェックする。
@@ -451,7 +437,7 @@ It is assumed that did for key P1 has already been issued. Let TX1 be the transa
 6. Broadcast TX2 and wait for Block confirmation
 
 It is also possible to update multiple `did:tprs` with one tx. However, the number of P2PKs referred to by input and the number of P2PKs existing in output MUST be the same.Otherwise, all `did:tprs` referred to by input are revoked.
----
+
 前提としてキーP1 に対するdidを既に発行済みとする。そのdidのtransactionをTX1とする。
 
 1. 新しいキー P2/S2 を作成
@@ -484,7 +470,6 @@ A Tapyrus transaction always expresses only one of DID issuance, update, and rev
 
 A single transaction cannot perform multiple operations such as issue, update, and revoke.
 
----
 前提としてキーP1 に対するdidを既に発行済みとする。そのdidのtransactionをTX1とする。
 
 1. 新しいキー P2/S2 を作成
