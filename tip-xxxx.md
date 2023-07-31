@@ -104,7 +104,7 @@ def bech32_encoding(network_id, block_height, tx_index, out_index):
    res += to_uint5_array(block_height << 1, 5)
    res += to_uint5_array(tx_index, 3)
    if out_index > 0:
-   res += to_uint5_array(out_index, 3)
+     res += to_uint5_array(out_index, 3)
    return res
 ```
 
