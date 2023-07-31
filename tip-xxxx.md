@@ -94,7 +94,7 @@ A sample code is shown in List 3-1 below.
 def to_uint5_array(val, length):
    res = []
    for i in range(0, length):
-   res.append(val & 0x1f)
+      res.append(val & 0x1f)
    val = val >> 5
    return res
 
