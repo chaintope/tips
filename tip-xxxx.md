@@ -50,7 +50,7 @@ Also, while [BIP-0136](https://github.com/bitcoin/bips/blob/master/bip-0136.medi
 
 | | description                            | possible type | # ob Bits used | values                                           |
 |----|----------------------------------------|----|----|--------------------------------------------------| 
-| Network ID | Identifier of Tapyrus Network          | Uint32 | 32 | 0 to 4294967296 <br/> ex)Tapyrus API Network = 1 |
+| Network ID | Identifier of Tapyrus Network          | Uint32 | 32 | 0 to 4294967295 <br/> ex)Tapyrus API Network = 1 |
 | Reserved Bit | for adjusting bits                     | Uint8 | 3 | only 0                                           |
 | Version | future use                             | Uint8 | 1 | only 0                                           |
 | Block Height | The Block Height including Tx          | Uint32 | 24 | Block 0 to Block 16777215                        |
