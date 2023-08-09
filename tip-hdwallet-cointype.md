@@ -21,7 +21,7 @@ This TIP is licensed under the CC0 license.
 
 Now, there is no cointype defined for Tapyrus in BIP-0044. So, It is confusing what number is set to cointype when implementing HDWallet for tapyrus.
 
-I suggest to propose to cointype for Tapyrus. but, We need consensus in this community before push to [SLIP-0044](https://github.com/satoshilabs/slips/blob/master/slip-0044.md)
+I propose to cointype for Tapyrus. But we need consensus in this community before pushing to [SLIP-0044](https://github.com/satoshilabs/slips/blob/master/slip-0044.md).
 
 ## Specification
 
