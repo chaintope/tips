@@ -1,0 +1,37 @@
+```
+TIP: HDWallet-cointype
+Type: Application
+Title: HDWallet cointype
+Status: Draft
+Author: Yukishige Nakajo <nakajo@chaintope.com>
+Created: 2023-08-09
+License: CC0
+```
+
+
+## Abstract
+
+Define cointype of BIP-0044 for Tapyrus. I suppose to '2377' as cointype.
+
+## Copyright
+
+This TIP is licensed under the CC0 license.
+
+## Motivation
+
+Now, Tapyrus is not defined cointype of BIP-0044. So, It is confuse what number set to cointype when implement HDWallet for tapyrus.
+
+I suggest to propose to cointype for Tapyrus. but, We need consensus in this community before push to [SLIP-0044](https://github.com/satoshilabs/slips/blob/master/slip-0044.md)
+
+## Specification
+
+Register cointype below:
+
+| Coin type | Path component (`coin_type'`) | Symbol | Coin               |
+|-------|-------------------------------|--------|--------------------|
+| 1     | 0x80000001                    |        | testnet(all coins) |
+| 2377  | 0x80000949                    | TPC    | Tapyrus            |
+
+## Rationale
+
+The '2377' is Tapyrus RPC default port. So that, this number is easy to remember. And this number is not registered yet.
