@@ -7,3 +7,4 @@ The TIP should provide a concise technical specification of the feature and a ra
 | Number           | Type    | Layer | Title       | Author           | Status |
 |------------------|---------|-------|-------------|------------------|--------|
 | [1](tip-0001.md) | Process |       | TIP Process | Shigeyuki Azuchi | Active |
+| [44](tip-0044.md) | Informational | Application | HDWallet cointype | Yukishige Nakajo | Draft |
