@@ -228,5 +228,15 @@
       "stage": "parse",
       "reason": "<valuelen> must not exceed the number of bytes remaining in the map"
     }
+  },
+  {
+    "id": "non-minimal-keytype",
+    "description": "PSTT_GLOBAL_TX_FEATURES' <keytype> is encoded as 0xfd 0x02 0x00 (3 bytes) instead of the minimal single byte 0x02.",
+    "pstt": "cHN0dP8D/QIABAEAAAABBAEBAQUBAQABDiABAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEPBAAAAAAAAQMIQJwAAAAAAAABBBl2qRQAAAAAAAAAAAAAAAAAAAAAAAAAAIisAA==",
+    "expected": {
+      "valid": false,
+      "stage": "parse",
+      "reason": "<keytype> must be minimally encoded"
+    }
   }
 ]

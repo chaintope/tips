@@ -4,9 +4,11 @@
 //   node verify.ts
 //
 // 検証内容:
-//   - invalid.json: stage=parse は構造・静的検証で必ず失敗し、stage=rule は構造上は読めること
+//   - invalid.json: stage=parse は構造・静的検証で必ず失敗し、stage=rule は構造上は読めること、
+//     かつ主要なrule-stageベクタは実際にその規則へ違反していること
 //   - valid.json: 全段階が構造・静的検証を通ること、UTXOのtxid整合、識別用txidの再計算一致、
-//     TX_MODIFIABLE値の一致、sighash再計算の一致、ECDSA/Schnorr署名の検証、抽出txidの一致
+//     TX_MODIFIABLE値の一致、sighash再計算の一致、ECDSA/Schnorr署名の検証、
+//     finalized段階から独自再構築したネットワーク直列化がextracted_txとバイト一致すること
 
 import * as fs from 'node:fs';
 import * as path from 'node:path';
@@ -38,7 +40,7 @@ function parsePstt(buf: Buffer): Parsed {
   }
   let off = 5;
 
-  function varint(): number {
+  function varint(requireMinimal = false): number {
     if (off >= buf.length) throw new Error('truncated varint');
     const b = buf[off];
     if (b < 0xfd) {
@@ -49,6 +51,9 @@ function parsePstt(buf: Buffer): Parsed {
       if (off + 3 > buf.length) throw new Error('truncated varint');
       const n = buf.readUInt16LE(off + 1);
       off += 3;
+      if (requireMinimal && n < 0xfd) {
+        throw new Error('compact size is not minimally encoded');
+      }
       return n;
     }
     throw new Error('varint size unsupported in fixtures');
@@ -66,7 +71,10 @@ function parsePstt(buf: Buffer): Parsed {
       }
       const keylen = varint();
       const keyStart = off;
-      const type = varint();
+      const type = varint(true); // <keytype> must be minimally encoded
+      if (off > keyStart + keylen) {
+        throw new Error('keytype varint exceeds declared keylen');
+      }
       if (keyStart + keylen > buf.length) throw new Error('truncated key');
       const keydata = Buffer.from(buf.subarray(off, keyStart + keylen));
       off = keyStart + keylen;
@@ -245,6 +253,33 @@ function identificationTxid(p: Parsed): string {
   return tx.getId();
 }
 
+// Transaction Extractor 章のアルゴリズムである。finalize済み段階のPSTTから
+// ネットワーク直列化されたトランザクションを構築する。
+function extractTransaction(p: Parsed): Buffer {
+  const tx = new tapyrus.Transaction();
+  tx.version = findRec(p.global, 0x02)!.value.readInt32LE(0);
+  tx.locktime = determineLocktime(p);
+  for (const input of p.inputs) {
+    const seqRec = findRec(input, 0x10);
+    const sequence = seqRec ? seqRec.value.readUInt32LE(0) : 0xffffffff;
+    const scriptSig = findRec(input, 0x07);
+    if (!scriptSig) throw new Error('missing PSTT_IN_FINAL_SCRIPTSIG');
+    tx.addInput(
+      Buffer.from(findRec(input, 0x0e)!.value),
+      findRec(input, 0x0f)!.value.readUInt32LE(0),
+      sequence,
+      Buffer.from(scriptSig.value),
+    );
+  }
+  for (const output of p.outputs) {
+    tx.addOutput(
+      Buffer.from(findRec(output, 0x04)!.value),
+      Number(findRec(output, 0x03)!.value.readBigInt64LE(0)),
+    );
+  }
+  return tx.toBuffer();
+}
+
 // --- 実行 ---
 
 let failures = 0;
@@ -256,13 +291,69 @@ function check(label: string, cond: boolean): void {
   }
 }
 
+// rule段階の各無効ベクタが「実際にその規則へ違反しているか」を確かめる関数である。
+// 構造的にparseできることを確認するだけでは、生成コードの取り違えで別の理由で
+// 無効になっていても見逃してしまうため、ここで規則そのものを再検証する。
+function extractP2shHash(script: Buffer): Buffer {
+  // OP_HASH160 <push 20> <hash> OP_EQUAL
+  if (script.length !== 23 || script[0] !== 0xa9 || script[1] !== 0x14 || script[22] !== 0x87) {
+    throw new Error('not a P2SH scriptPubKey');
+  }
+  return script.subarray(2, 22);
+}
+
+const RULE_VIOLATION_CHECKS: Record<string, (p: Parsed) => void> = {
+  'utxo-txid-mismatch': p => {
+    const utxo = findRec(p.inputs[0], 0x00)!;
+    const prevTx = tapyrus.Transaction.fromBuffer(utxo.value);
+    const utxoTxid = Buffer.from(prevTx.getId(), 'hex').reverse();
+    const declared = findRec(p.inputs[0], 0x0e)!.value;
+    check(
+      'invalid/utxo-txid-mismatch: UTXO txid actually differs from PSTT_IN_PREVIOUS_TXID',
+      !utxoTxid.equals(declared),
+    );
+  },
+  'contradictory-locktimes': p => {
+    let threw = false;
+    try {
+      determineLocktime(p);
+    } catch {
+      threw = true;
+    }
+    check('invalid/contradictory-locktimes: determineLocktime actually throws', threw);
+  },
+  'single-without-corresponding-output': p => {
+    const idx = p.inputs.findIndex(recs => recs.some(r => r.type === 0x02));
+    const sig = findRec(p.inputs[idx], 0x02)!;
+    const hashType = sig.value[sig.value.length - 1] & 0x7f;
+    check(
+      'invalid/single-without-corresponding-output: signed input actually uses SIGHASH_SINGLE with no corresponding output',
+      hashType === 0x03 && idx >= p.outputs.length,
+    );
+  },
+  'redeem-script-hash-mismatch': p => {
+    const utxo = findRec(p.inputs[0], 0x00)!;
+    const prevTx = tapyrus.Transaction.fromBuffer(utxo.value);
+    const vout = findRec(p.inputs[0], 0x0f)!.value.readUInt32LE(0);
+    const committedHash = extractP2shHash(Buffer.from(prevTx.outs[vout].script));
+    const redeemScript = findRec(p.inputs[0], 0x04)!.value;
+    const actualHash = tapyrus.crypto.hash160(redeemScript);
+    check(
+      'invalid/redeem-script-hash-mismatch: redeem script hash actually differs from the committed hash',
+      !actualHash.equals(committedHash),
+    );
+  },
+};
+
 const invalid = JSON.parse(
   fs.readFileSync(path.join(__dirname, '..', 'invalid.json'), 'utf8'),
 );
 for (const v of invalid) {
   let error: string | null = null;
+  let parsed: Parsed | null = null;
   try {
-    staticValidate(parsePstt(Buffer.from(v.pstt, 'base64')));
+    parsed = parsePstt(Buffer.from(v.pstt, 'base64'));
+    staticValidate(parsed);
   } catch (e) {
     error = (e as Error).message;
   }
@@ -270,7 +361,12 @@ for (const v of invalid) {
     check(`invalid/${v.id}: must fail structural or static validation`, error !== null);
   } else {
     check(`invalid/${v.id}: rule-stage vector must parse (got: ${error})`, error === null);
+    const ruleCheck = RULE_VIOLATION_CHECKS[v.id];
+    if (ruleCheck && parsed) ruleCheck(parsed);
   }
+}
+for (const id of Object.keys(RULE_VIOLATION_CHECKS)) {
+  check(`invalid/${id}: vector is present`, invalid.some((v: { id: string }) => v.id === id));
 }
 
 // このTIPが定義する型値の一覧である(予約されているだけの値も、認識はしている
@@ -389,6 +485,13 @@ for (const s of valid) {
   if (!s.extracted_tx || !lastParsed) continue;
   const finalTx = tapyrus.Transaction.fromHex(s.extracted_tx);
   check(`valid/${s.id}: final txid`, finalTx.getId() === s.final_txid);
+
+  // Transaction Extractor: 最終(finalized)段階のPSTTから独自に再構築したネットワーク
+  // 直列化が、フィクスチャの extracted_tx とバイト単位で一致することを確かめる。
+  check(
+    `valid/${s.id}: extracted_tx matches independent reconstruction from the finalized stage`,
+    extractTransaction(lastParsed).toString('hex') === s.extracted_tx,
+  );
 
   // 署名検証: PARTIAL_SIG を最も多く含む最後の段階を intermediates と突き合わせる
   if (!s.intermediates) continue;

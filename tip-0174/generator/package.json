@@ -11,7 +11,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "tapyrusjs-lib": "file:../../../tapyrusjs-lib"
+    "tapyrusjs-lib": "0.7.3"
   },
   "devDependencies": {
     "@types/node": "^24.0.0",

@@ -11,6 +11,7 @@ import {
   OUTPUT,
   MAGIC,
   keypair,
+  keypairNonMinimalType,
   map,
   pstt,
   compactSize,
@@ -537,6 +538,26 @@ function add(
     b,
     'parse',
     '<valuelen> must not exceed the number of bytes remaining in the map',
+  );
+}
+
+// 22. <keytype> が非最小エンコーディング(1バイトで表せる値を3バイトのcompact sizeで表す)
+{
+  const b = pstt(
+    [
+      keypairNonMinimalType(GLOBAL.TX_FEATURES, null, i32le(1)),
+      keypair(GLOBAL.INPUT_COUNT, null, compactSize(1)),
+      keypair(GLOBAL.OUTPUT_COUNT, null, compactSize(1)),
+    ],
+    [minimalInput(TXID_A, 0)],
+    [minimalOutput(40000, DUMMY_P2PKH)],
+  );
+  add(
+    'non-minimal-keytype',
+    'PSTT_GLOBAL_TX_FEATURES\' <keytype> is encoded as 0xfd 0x02 0x00 (3 bytes) instead of the minimal single byte 0x02.',
+    b,
+    'parse',
+    '<keytype> must be minimally encoded',
   );
 }
 

@@ -7,9 +7,8 @@ Test vectors for [TIP-174: Partially Signed Tapyrus Transaction Format](../tip-0
 * `invalid.json` — PSTTs that must be rejected, either at parse time or by role rules.
 * `valid.json` — PSTT workflow series: each entry walks one workflow through its stages, with expected identification txids, the extracted transaction, and signing intermediates.
 * `generator/` — TypeScript scripts that produce the fixtures, run directly with Node.js (v24+,
-  native type stripping). Requires the `tapyrusjs-lib` repository checked out as a sibling of
-  the `tips` repository (`../tapyrusjs-lib`, with its own `npm install` done), then
-  `npm install` in `generator/` and e.g. `npm run gen:invalid`.
+  native type stripping). Depends on the published `tapyrusjs-lib` npm package (pinned to
+  `0.7.3`); run `npm install` in `generator/` and e.g. `npm run gen:invalid`.
 
 ## Fixture format
 

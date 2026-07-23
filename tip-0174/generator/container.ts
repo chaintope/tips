@@ -97,6 +97,28 @@ export function keypair(
   ]);
 }
 
+// keydata/valuelen は通常どおりだが、<keytype> だけ非最小エンコーディングの
+// compact size で書く(最小エンコーディング違反ベクタ用)。
+export function keypairNonMinimalType(
+  type: number,
+  keydata: Buffer | null,
+  value: Buffer,
+): Buffer {
+  const kd = keydata ?? Buffer.alloc(0);
+  const typeBytes = Buffer.concat([Buffer.from([0xfd]), (() => {
+    const b = Buffer.alloc(2);
+    b.writeUInt16LE(type, 0);
+    return b;
+  })()]); // 0xfd接頭辞の3バイト表現(値が0xfd未満でも使うため非最小)
+  return Buffer.concat([
+    compactSize(typeBytes.length + kd.length),
+    typeBytes,
+    kd,
+    compactSize(value.length),
+    value,
+  ]);
+}
+
 // 1マップ: <keypair>* 0x00
 export function map(pairs: Buffer[]): Buffer {
   return Buffer.concat([...pairs, Buffer.from([0x00])]);
