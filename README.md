@@ -12,3 +12,4 @@ The TIP should provide a concise technical specification of the feature and a ra
 | [44](tip-0044.md)  | Informational | Application | HDWallet cointype | Yukishige Nakajo | Draft |
 | [100](tip-0100.md) | Informational | Application | Soulbound Tokens | Shigeyuki Azuchi | Draft |
 | [137](tip-0137.md) | Informational | Application | Generic Signed Message Format | Hajime Yamaguchi | Draft |
+| [174](tip-0174.md) | Standards Track | Applications | Partially Signed Tapyrus Transaction Format | Hajime Yamaguchi | Draft |

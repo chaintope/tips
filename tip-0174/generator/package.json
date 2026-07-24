@@ -1,0 +1,20 @@
+{
+  "name": "tip-0174-generator",
+  "private": true,
+  "type": "module",
+  "description": "Generates TIP-174 (PSTT) test vectors",
+  "scripts": {
+    "gen": "node gen-invalid.ts && node gen-valid.ts",
+    "gen:invalid": "node gen-invalid.ts",
+    "gen:valid": "node gen-valid.ts",
+    "verify": "node verify.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "tapyrusjs-lib": "0.7.3"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "typescript": "^5.5.0"
+  }
+}
