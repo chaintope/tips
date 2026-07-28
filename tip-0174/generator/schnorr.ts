@@ -1,15 +1,17 @@
 // Tapyrus の Schnorr 署名方式である(BIP340 ではない)。
-// 仕様・アルゴリズムタグの厳密な値は tapyrus-core のリファレンス実装で確認した:
-// https://github.com/chaintope/tapyrus-core/blob/master/test/functional/test_framework/schnorr.py
-//   - ノンスは RFC6979(HMAC-DRBG)。追加データ algo16 = "Schnorr + SHA256"(スペース込み16バイト、パディング無し)
+// アルゴリズムタグの厳密な値は、tapyrus-core が実際に署名に用いる C 実装
+// (同梱の libsecp256k1 フォーク chaintope/secp256k1 の
+// src/modules/schnorr/main_impl.h にある secp256k1_schnorr_sign)で確認した:
+// https://github.com/chaintope/secp256k1/blob/master/src/modules/schnorr/main_impl.h
+//   - ノンスは RFC6979(HMAC-DRBG)。keydata = key32 || msg32 || algo16 であり、
+//     algo16 = "SCHNORR + SHA256"(スペース込み16バイト、パディング無し)
 //   - R の y 座標が平方剰余(Jacobi 記号 1)になるようノンスの符号を調整する
 //   - e = SHA256(Rx(32) || 圧縮公開鍵P(33) || msg(32)) mod n
 //   - 署名は Rx(32) || s(32) の 64 バイト
-// 生成した署名は verify() による自己検証に加え、上記リファレンス実装の
-// `if __name__ == '__main__':` 節にある既知解ベクタ(tapyrus-core の
-// src/test/key_tests.cpp の決定論的署名テストを複製したもの)との一致で検証する。
+//
 // 自己検証(sign→verify)はノンス導出アルゴリズム自体の誤りを検出できない
-// (verify() はノンスタグに依存しないため)。既知解との突き合わせが必須である。
+// (verify() は R' = sG - eP を計算するだけでノンスタグに依存しないため)。
+// 既知解との突き合わせが必須である。
 
 import { createHash, createHmac } from 'node:crypto';
 
@@ -107,8 +109,8 @@ function decompress(pub: Buffer): { x: bigint; y: bigint } {
 
 // libsecp256k1 の nonce_function_rfc6979 と同じ手順である。
 // keydata = key32 || msg32 || algo16
-// "Schnorr + SHA256" は ASCII で 16 バイトちょうどであり、パディングは不要である。
-const ALGO16 = Buffer.from('Schnorr + SHA256', 'ascii');
+// "SCHNORR + SHA256" は ASCII で 16 バイトちょうどであり、パディングは不要である。
+const ALGO16 = Buffer.from('SCHNORR + SHA256', 'ascii');
 
 function rfc6979Nonce(key32: Buffer, msg32: Buffer): bigint {
   const keydata = Buffer.concat([key32, msg32, ALGO16]);
@@ -169,28 +171,48 @@ export function verify(pub33: Buffer, msg32: Buffer, sig64: Buffer): boolean {
   return isQuadRes(Rp.y) && Rp.x === r;
 }
 
-// tapyrus-core のリファレンス実装(test/functional/test_framework/schnorr.py)に埋め込まれた
-// 既知解ベクタである。sign() が本物の Tapyrus Schnorr 実装と一致することの唯一の根拠であり、
-// 自己検証(sign→verify)では代替できない。モジュール読み込み時に検証し、不一致なら例外を投げる。
-const KAT_PRIV = Buffer.from(
-  '12b004fff7f4b69ef8650e767f18f11ede158148b425660723b9f9a66e61f747',
-  'hex',
-);
-const KAT_MSG = Buffer.from(
-  '5255683da567900bfd3e786ed8836a4e7763c221bf1ac20ece2a5171b9199e8a',
-  'hex',
-);
-const KAT_SIG =
-  '1674227edddf7942437c1dc2459b49e27dd5057b1b6d32667b0cd13cacc5cec' +
-  '0f4e0177183a4e461a60165e12094067872924fa6c75ccedd287c337fde0a93f2';
+// tapyrus-core 自身の C++ 単体テスト src/test/key_tests.cpp の決定論的 Schnorr 署名
+// テストにある既知解ベクタである。同テストは C 実装 secp256k1_schnorr_sign を
+// 検証しており、ノードが実際に署名する経路そのものである。
+//
+// sign() が本物の Tapyrus Schnorr 実装と一致することの唯一の根拠であり、
+// 自己検証(sign→verify)では代替できない。この実装の出力から作り直してはならない。
+// モジュール読み込み時に検証し、不一致なら例外を投げる。
+//
+// メッセージは key_tests.cpp と同じく Hash("Very deterministic message")
+// すなわち ASCII 文字列の SHA256d である。
+const KAT_MSG = createHash('sha256')
+  .update(
+    createHash('sha256').update('Very deterministic message', 'ascii').digest(),
+  )
+  .digest();
+
+const KATS: Array<{ priv: string; sig: string }> = [
+  {
+    // key_tests.cpp strSecret1 (5HxWvvfubhXpYYpS3tJkw6fq9jE9j18THftkZjHHfmFiWtmAbrj)
+    priv: '12b004fff7f4b69ef8650e767f18f11ede158148b425660723b9f9a66e61f747',
+    sig:
+      '0567cbade8656cff3bb08d00913d59363273c32ea66130cf0c9b1be8e874b8bc' +
+      'b0e62372c22e8ecd34ffeadda493beb221e52bf23413cc6c3abdcdfc03d0ed52',
+  },
+  {
+    // key_tests.cpp strSecret2 (5KC4ejrDjv152FGwP386VD1i2NYc5KkfSMyv1nGy1VGDxGHqVY3)
+    priv: 'b524c28b61c9b2c49b2c7dd4c2d75887abb78768c054bd7c01af4029f6c0d117',
+    sig:
+      '064623e23b59e1bd304156fb20c197eee23e6d10e021664aef3878364d9d5e17' +
+      '5916f7909c9358192e9c1510ebb466b085e726aab0d71c6ef9f298b53ea179aa',
+  },
+];
 
 export function selfTest(): void {
-  const sig = sign(KAT_PRIV, KAT_MSG).toString('hex');
-  if (sig !== KAT_SIG) {
-    throw new Error(
-      `Schnorr KAT mismatch: got ${sig}, expected ${KAT_SIG}. ` +
-        'The nonce derivation does not match tapyrus-core.',
-    );
+  for (const kat of KATS) {
+    const sig = sign(Buffer.from(kat.priv, 'hex'), KAT_MSG).toString('hex');
+    if (sig !== kat.sig) {
+      throw new Error(
+        `Schnorr KAT mismatch: got ${sig}, expected ${kat.sig}. ` +
+          'The nonce derivation does not match tapyrus-core.',
+      );
+    }
   }
 }
 
