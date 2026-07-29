@@ -104,7 +104,7 @@ function add(
   });
 }
 
-// 1. Wrong magic (the Bitcoin PSBT magic)
+// Wrong magic (the Bitcoin PSBT magic)
 {
   const b = base();
   Buffer.from('70736274', 'hex').copy(b, 0); // "psbt"
@@ -117,7 +117,7 @@ function add(
   );
 }
 
-// 2. Missing trailing map separator
+// Missing trailing map separator
 {
   const b = base();
   add(
@@ -129,7 +129,7 @@ function add(
   );
 }
 
-// 3. Duplicate complete key
+// Duplicate complete key
 {
   const b = pstt(
     [
@@ -150,7 +150,7 @@ function add(
   );
 }
 
-// 4. Missing required global field (TX_FEATURES)
+// Missing required global field (TX_FEATURES)
 {
   const b = pstt(
     [
@@ -169,7 +169,7 @@ function add(
   );
 }
 
-// 5. Missing required input field (PREVIOUS_TXID)
+// Missing required input field (PREVIOUS_TXID)
 {
   const b = pstt(
     minimalGlobal(1, 1),
@@ -185,7 +185,7 @@ function add(
   );
 }
 
-// 6. Missing required output field (AMOUNT)
+// Missing required output field (AMOUNT)
 {
   const b = pstt(
     minimalGlobal(1, 1),
@@ -201,7 +201,7 @@ function add(
   );
 }
 
-// 7. Map count does not match the declared counts
+// Map count does not match the declared counts
 {
   const b = pstt(
     minimalGlobal(2, 1), // INPUT_COUNT=2 but only one input map
@@ -217,7 +217,7 @@ function add(
   );
 }
 
-// 8. UTXO txid mismatch
+// UTXO txid mismatch
 {
   const prev = buildPrevTx();
   const declared = Buffer.alloc(32, 0x02); // Differs from the malfix txid of prev
@@ -235,7 +235,7 @@ function add(
   );
 }
 
-// 9. Retired type value 0x00 (the global unsigned transaction)
+// Retired type value 0x00 (the global unsigned transaction)
 {
   const prev = buildPrevTx();
   const b = pstt(
@@ -252,7 +252,7 @@ function add(
   );
 }
 
-// 10. Version too high
+// Version too high
 {
   const b = pstt(
     minimalGlobal(1, 1, [keypair(GLOBAL.VERSION, null, u32le(1))]),
@@ -268,7 +268,7 @@ function add(
   );
 }
 
-// 11. Contradictory locktime requirements
+// Contradictory locktime requirements
 {
   const b = pstt(
     minimalGlobal(2, 1),
@@ -291,7 +291,7 @@ function add(
   );
 }
 
-// 12. SIGHASH_SINGLE signature on an input with no corresponding output
+// SIGHASH_SINGLE signature on an input with no corresponding output
 {
   const b = pstt(
     minimalGlobal(2, 1),
@@ -312,7 +312,7 @@ function add(
   );
 }
 
-// 13a. Missing required input field (OUTPUT_INDEX, the counterpart of the PREVIOUS_TXID case)
+// Missing required input field (OUTPUT_INDEX, the counterpart of the PREVIOUS_TXID case)
 {
   const b = pstt(
     minimalGlobal(1, 1),
@@ -328,7 +328,7 @@ function add(
   );
 }
 
-// 13b. Missing required output field (SCRIPT, the counterpart of the AMOUNT case)
+// Missing required output field (SCRIPT, the counterpart of the AMOUNT case)
 {
   const b = pstt(
     minimalGlobal(1, 1),
@@ -344,7 +344,7 @@ function add(
   );
 }
 
-// 13. REQUIRED_TIME_LOCKTIME below the lower bound
+// REQUIRED_TIME_LOCKTIME below the lower bound
 {
   const b = pstt(
     minimalGlobal(1, 1),
@@ -364,7 +364,7 @@ function add(
   );
 }
 
-// 14. REQUIRED_HEIGHT_LOCKTIME at or above the upper bound
+// REQUIRED_HEIGHT_LOCKTIME at or above the upper bound
 {
   const b = pstt(
     minimalGlobal(1, 1),
@@ -384,7 +384,7 @@ function add(
   );
 }
 
-// 15. REQUIRED_HEIGHT_LOCKTIME is zero
+// REQUIRED_HEIGHT_LOCKTIME is zero
 {
   const b = pstt(
     minimalGlobal(1, 1),
@@ -400,7 +400,7 @@ function add(
   );
 }
 
-// 16. Missing PSTT_GLOBAL_INPUT_COUNT
+// Missing PSTT_GLOBAL_INPUT_COUNT
 {
   const b = pstt(
     [
@@ -419,7 +419,7 @@ function add(
   );
 }
 
-// 17. Missing PSTT_GLOBAL_OUTPUT_COUNT
+// Missing PSTT_GLOBAL_OUTPUT_COUNT
 {
   const b = pstt(
     [
@@ -438,7 +438,7 @@ function add(
   );
 }
 
-// 18. Extra bytes in a field whose keydata is defined as None
+// Extra bytes in a field whose keydata is defined as None
 {
   const b = pstt(
     [
@@ -458,7 +458,7 @@ function add(
   );
 }
 
-// 19. Malformed public key length (neither 33 nor 65 bytes)
+// Malformed public key length (neither 33 nor 65 bytes)
 {
   const shortPubkey = pubkey.subarray(0, 32); // 32 bytes where 33 are expected
   const b = pstt(
@@ -479,7 +479,7 @@ function add(
   );
 }
 
-// 20. The redeem script does not match the hash in the scriptPubKey (P2SH)
+// The redeem script does not match the hash in the scriptPubKey (P2SH)
 {
   const correctRedeem = Buffer.from([0x51]); // OP_1 (a dummy redeem script)
   const wrongRedeem = Buffer.from([0x52]); // OP_2 (a different script whose hash does not match)
@@ -513,7 +513,7 @@ function add(
   );
 }
 
-// 21. valuelen is larger than the number of bytes actually remaining
+// valuelen is larger than the number of bytes actually remaining
 {
   const scriptValue = DUMMY_P2PKH;
   const scriptTypeBytes = compactSize(OUTPUT.SCRIPT);
@@ -543,7 +543,7 @@ function add(
   );
 }
 
-// 22. Non-minimally encoded <keytype>
+// Non-minimally encoded <keytype>
 // (a value representable in one byte written as a 3-byte compact size)
 {
   const b = pstt(
