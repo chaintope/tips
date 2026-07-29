@@ -1,5 +1,5 @@
-// TIP-174 の有効テストベクタ(valid.json)を生成する。
-// 各系列は Roles 章のワークフローを段階ごとに通したものである。
+// Generates the valid test vectors (valid.json) of TIP-174.
+// Each series walks a workflow from the Roles section stage by stage.
 
 import * as fs from 'node:fs';
 import * as path from 'node:path';
@@ -56,7 +56,7 @@ interface Series {
   final_txid?: string;
 }
 
-// --- 素材 ---
+// --- Material ---
 
 function p2pkhScript(i: number): Buffer {
   const out = tapyrus.payments.p2pkh({ pubkey: pubkey(i), network: dev })
@@ -65,7 +65,8 @@ function p2pkhScript(i: number): Buffer {
   return out;
 }
 
-// 再発行可能トークン(0xC1)のカラーID: 発行入力の scriptPubKey の SHA256 をペイロードとする
+// Color identifier of a reissuable token (0xC1): its payload is the SHA256 of the
+// scriptPubKey of the issuing input
 export const COLOR_ID = Buffer.concat([
   Buffer.from([0xc1]),
   createHash('sha256').update(p2pkhScript(0)).digest(),
@@ -85,7 +86,7 @@ function txidIntern(tx: tapyrus.Transaction): Buffer {
   return Buffer.from(tx.getId(), 'hex').reverse();
 }
 
-// key0 へ TPC を支払う資金トランザクション
+// A funding transaction that pays TPC to key 0
 function buildFundingTx(marker: number, amount: number, script: Buffer) {
   const tx = new tapyrus.Transaction();
   tx.version = 1;
@@ -105,7 +106,7 @@ interface InSpec {
 interface OutSpec {
   amount: number;
   script: Buffer;
-  derivIdx?: number; // お釣り出力の BIP32 導出インデックス
+  derivIdx?: number; // BIP32 derivation index of the change output
 }
 
 function buildTx(
@@ -136,7 +137,7 @@ function makeSignature(spec: InSpec, sighash: Buffer): Buffer {
   if (!schnorr.verify(pubkey(spec.signKeyIdx), sighash, raw)) {
     throw new Error('schnorr self-verify failed');
   }
-  return Buffer.concat([raw, Buffer.from([SIGHASH_ALL])]); // 65バイト
+  return Buffer.concat([raw, Buffer.from([SIGHASH_ALL])]); // 65 bytes
 }
 
 function outputMaps(outs: OutSpec[], withDeriv: boolean): Buffer[][] {
@@ -151,7 +152,7 @@ function outputMaps(outs: OutSpec[], withDeriv: boolean): Buffer[][] {
   );
 }
 
-// --- 汎用系列: 作成時に全入出力が確定しているワークフロー ---
+// --- Generic series: a workflow where all inputs and outputs are fixed at creation ---
 
 function standardSeries(
   id: string,
@@ -169,7 +170,7 @@ function standardSeries(
       withUpdaterExtras ? extraGlobalFromUpdate : [],
     );
 
-  // Creator: 全入出力を構築済み(TX_MODIFIABLE 省略 = 変更不可)
+  // Creator: all inputs and outputs are already built (TX_MODIFIABLE omitted = not modifiable)
   const created = pstt(
     globalPairs(false),
     ins.map((i, k) => minimalInput(prevIds[k], i.vout)),
@@ -178,7 +179,7 @@ function standardSeries(
 
   const idTxid = buildTx(inRefs, outs, 0).getId();
 
-  // Updater(グローバルXPUB等の追加コンテキストがあればここから付与する)
+  // Updater (additional context such as the global XPUB is attached from here on)
   const updaterExtras = (k: number) => [
     keypair(INPUT.UTXO, null, ins[k].prevTx.toBuffer()),
     keypair(INPUT.SIGHASH_TYPE, null, u32le(SIGHASH_ALL)),
@@ -251,7 +252,7 @@ function standardSeries(
   };
 }
 
-// --- 系列: 構築段階(Constructor による追加と TX_MODIFIABLE の遷移) ---
+// --- Series: construction stages (Constructor additions and TX_MODIFIABLE transitions) ---
 
 function constructionSeries(): Series {
   const funding = buildFundingTx(0xaa, 100000, p2pkhScript(0));
@@ -267,11 +268,11 @@ function constructionSeries(): Series {
       keypair(GLOBAL.TX_MODIFIABLE, null, Buffer.from([flags])),
     ]);
 
-  // Creator: 空で作成、両フラグを立てる
+  // Creator: creates an empty PSTT and sets both flags
   const empty = pstt(globalPairs(0, 0, 0b11), [], []);
   const emptyId = buildTx([], [], 0).getId();
 
-  // Constructor: 入力を追加
+  // Constructor: adds an input
   const inputAdded = pstt(
     globalPairs(1, 0, 0b11),
     [minimalInput(prevId, 0)],
@@ -279,7 +280,7 @@ function constructionSeries(): Series {
   );
   const inputAddedId = buildTx(inRef, [], 0).getId();
 
-  // Constructor: 出力を追加
+  // Constructor: adds the outputs
   const outputsAdded = pstt(
     globalPairs(1, 2, 0b11),
     [minimalInput(prevId, 0)],
@@ -287,14 +288,14 @@ function constructionSeries(): Series {
   );
   const fullId = buildTx(inRef, outs, 0).getId();
 
-  // Constructor: 構築完了を宣言(両フラグをクリア)
+  // Constructor: declares construction finished (clears both flags)
   const finished = pstt(
     globalPairs(1, 2, 0b00),
     [minimalInput(prevId, 0)],
     outputMaps(outs, false),
   );
 
-  // Updater + Signer (SIGHASH_ALL なので両フラグはクリアのまま)
+  // Updater + Signer (SIGHASH_ALL, so both flags stay cleared)
   const scriptCode = p2pkhScript(0);
   const unsigned = buildTx(inRef, outs, 0xffffffff);
   const sighash = unsigned.hashForSignature(0, scriptCode, SIGHASH_ALL);
@@ -353,7 +354,7 @@ function constructionSeries(): Series {
   };
 }
 
-// --- 系列: CP2SH マルチシグと Combiner 併合 ---
+// --- Series: CP2SH multisig and merging by a Combiner ---
 
 function multisigCombineSeries(): Series {
   const ops = tapyrus.opcodes;
@@ -388,11 +389,11 @@ function multisigCombineSeries(): Series {
   );
   const idTxid = buildTx(inRefs, outs, 0).getId();
 
-  // このTIPが定義しない型値のレコードである。Combiner・Input Finalizerは
-  // 未知のレコードを保持しなければならない(Roles章)ことを実証する。
+  // A record with a type value this TIP does not define. It demonstrates that a Combiner
+  // and an Input Finalizer must preserve unknown records (Roles section).
   const UNKNOWN_RECORD = keypair(0x20, null, Buffer.from('future-field', 'ascii'));
 
-  // CP2SH 入力の scriptCode は redeem script(カラープレフィックスを含まない)
+  // The scriptCode of the CP2SH input is the redeem script (without the color prefix)
   const input0Base = () => [
     keypair(INPUT.UTXO, null, tokenPrev.toBuffer()),
     keypair(INPUT.SIGHASH_TYPE, null, u32le(SIGHASH_ALL)),
@@ -426,7 +427,7 @@ function multisigCombineSeries(): Series {
   const sig4 = enc(4, sighash0);
   const sigFee = enc(0, sighash1);
 
-  // 署名者A: key3 とfee入力の key0 を保有
+  // Signer A: holds key 3 and key 0 of the fee input
   const signedA = pstt(
     globalPairs(),
     [
@@ -441,7 +442,8 @@ function multisigCombineSeries(): Series {
     ],
     outputMaps(outs, true),
   );
-  // 署名者B: key4 のみ保有(updated 段階から独立に署名)。未知のレコードも1つ運ぶ。
+  // Signer B: holds only key 4 (signs independently from the updated stage).
+  // It also carries one unknown record.
   const signedB = pstt(
     globalPairs(),
     [
@@ -454,8 +456,8 @@ function multisigCombineSeries(): Series {
     ],
     outputMaps(outs, true),
   );
-  // Combiner: 同一識別子の2つのPSTTのレコード和集合。signedBだけが運んだ
-  // UNKNOWN_RECORD も、未知の型として保持されなければならない。
+  // Combiner: the union of the records of two PSTTs with the same identifier. The
+  // UNKNOWN_RECORD carried only by signedB must also be preserved as an unknown type.
   const combined = pstt(
     globalPairs(),
     [
@@ -475,8 +477,8 @@ function multisigCombineSeries(): Series {
 
   const scriptSig0 = tapyrus.script.compile([ops.OP_0, sig3, sig4, redeem]);
   const scriptSig1 = tapyrus.script.compile([sigFee, pubkey(0)]);
-  // Input Finalizer: UNKNOWN_RECORD は署名収集用フィールドではないため、
-  // finalize後も保持されなければならない(Roles > Input Finalizer)。
+  // Input Finalizer: UNKNOWN_RECORD is not a signature-collecting field, so it must be
+  // preserved after finalization (Roles > Input Finalizer).
   const finalized = pstt(
     globalPairs(),
     [
@@ -525,12 +527,12 @@ function multisigCombineSeries(): Series {
   };
 }
 
-// --- 系列: Fee Provider(非対話型・定額UTXO方式) ---
+// --- Series: fee provider (non-interactive, exact-fee UTXO variant) ---
 
 function feeProviderNonInteractiveSeries(): Series {
   const ALL_ACP = 0x81; // SIGHASH_ALL | SIGHASH_ANYONECANPAY
   const tokenPrev = buildFundingTx(0xf1, 100, cp2pkhScript(0));
-  const feePrev = buildFundingTx(0xf2, 1000, p2pkhScript(5)); // ちょうど手数料額
+  const feePrev = buildFundingTx(0xf2, 1000, p2pkhScript(5)); // Exactly the fee amount
   const tokenId = txidIntern(tokenPrev);
   const feeId = txidIntern(feePrev);
   const outs: OutSpec[] = [{ amount: 100, script: cp2pkhScript(1) }];
@@ -539,7 +541,7 @@ function feeProviderNonInteractiveSeries(): Series {
       keypair(GLOBAL.TX_MODIFIABLE, null, Buffer.from([flags])),
     ]);
 
-  // 1. ユーザーがトークン入出力を構築(入力のみ変更可)
+  // 1. The user builds the token input and output (only inputs remain modifiable)
   const userConstructed = pstt(
     g(1, 0b01),
     [minimalInput(tokenId, 0)],
@@ -547,7 +549,8 @@ function feeProviderNonInteractiveSeries(): Series {
   );
   const id1 = buildTx([{ prevIntern: tokenId, vout: 0 }], outs, 0).getId();
 
-  // 2. ユーザーが ALL|ANYONECANPAY で署名(sighashは自入力のみを含むため、入力追加後も不変)
+  // 2. The user signs with ALL|ANYONECANPAY (the sighash covers only its own input,
+  //    so it stays the same after inputs are added)
   const unsigned1 = buildTx([{ prevIntern: tokenId, vout: 0 }], outs, 0xffffffff);
   const sighashUser = unsigned1.hashForSignature(0, cp2pkhScript(0), ALL_ACP);
   const sigUser = tapyrus.script.signature.encode(
@@ -566,7 +569,7 @@ function feeProviderNonInteractiveSeries(): Series {
     outputMaps(outs, false),
   );
 
-  // 3. プロバイダが定額手数料入力を追加
+  // 3. The provider adds the exact-fee input
   const inRefs2 = [
     { prevIntern: tokenId, vout: 0 },
     { prevIntern: feeId, vout: 0 },
@@ -578,7 +581,7 @@ function feeProviderNonInteractiveSeries(): Series {
   );
   const id2 = buildTx(inRefs2, outs, 0).getId();
 
-  // 4. プロバイダが SIGHASH_ALL で署名(Inputs Modifiable がクリアされる)
+  // 4. The provider signs with SIGHASH_ALL (Inputs Modifiable is cleared)
   const unsigned2 = buildTx(inRefs2, outs, 0xffffffff);
   const sighashProv = unsigned2.hashForSignature(1, p2pkhScript(5), SIGHASH_ALL);
   const sigProv = tapyrus.script.signature.encode(
@@ -599,7 +602,7 @@ function feeProviderNonInteractiveSeries(): Series {
     outputMaps(outs, false),
   );
 
-  // 5. finalize / extract
+  // 5. Finalize and extract
   const scriptSig0 = tapyrus.script.compile([sigUser, pubkey(0)]);
   const scriptSig1 = tapyrus.script.compile([sigProv, pubkey(5)]);
   const finalized = pstt(
@@ -652,7 +655,7 @@ function feeProviderNonInteractiveSeries(): Series {
   };
 }
 
-// --- 系列: Fee Provider(対話型・お釣りあり) ---
+// --- Series: fee provider (interactive, with change output) ---
 
 function feeProviderInteractiveSeries(): Series {
   const tokenPrev = buildFundingTx(0xf4, 100, cp2pkhScript(0));
@@ -662,14 +665,14 @@ function feeProviderInteractiveSeries(): Series {
   const outs1: OutSpec[] = [{ amount: 100, script: cp2pkhScript(1) }];
   const outs2: OutSpec[] = [
     ...outs1,
-    { amount: 19000, script: p2pkhScript(6), derivIdx: 6 }, // プロバイダのお釣り
+    { amount: 19000, script: p2pkhScript(6), derivIdx: 6 }, // The provider's change
   ];
   const g = (ic: number, oc: number, flags: number) =>
     minimalGlobal(ic, oc, [
       keypair(GLOBAL.TX_MODIFIABLE, null, Buffer.from([flags])),
     ]);
 
-  // 1. ユーザーが未署名のまま構築(両フラグを立てて送付)
+  // 1. The user builds the transaction unsigned (and sends it with both flags set)
   const userConstructed = pstt(
     g(1, 1, 0b11),
     [minimalInput(tokenId, 0)],
@@ -677,7 +680,7 @@ function feeProviderInteractiveSeries(): Series {
   );
   const id1 = buildTx([{ prevIntern: tokenId, vout: 0 }], outs1, 0).getId();
 
-  // 2. プロバイダが手数料入力とお釣り出力を追加し、構築完了を宣言
+  // 2. The provider adds the fee input and the change output, then declares construction finished
   const inRefs2 = [
     { prevIntern: tokenId, vout: 0 },
     { prevIntern: provId, vout: 0 },
@@ -692,7 +695,7 @@ function feeProviderInteractiveSeries(): Series {
   );
   const id2 = buildTx(inRefs2, outs2, 0).getId();
 
-  // 3. 双方が SIGHASH_ALL で署名
+  // 3. Both parties sign with SIGHASH_ALL
   const unsigned = buildTx(inRefs2, outs2, 0xffffffff);
   const sighash0 = unsigned.hashForSignature(0, cp2pkhScript(0), SIGHASH_ALL);
   const sighash1 = unsigned.hashForSignature(1, p2pkhScript(5), SIGHASH_ALL);
@@ -721,7 +724,7 @@ function feeProviderInteractiveSeries(): Series {
     outputMaps(outs2, true),
   );
 
-  // 4. finalize / extract
+  // 4. Finalize and extract
   const scriptSig0 = tapyrus.script.compile([sigUser, pubkey(0)]);
   const scriptSig1 = tapyrus.script.compile([sigProv, pubkey(5)]);
   const finalized = pstt(
@@ -773,7 +776,7 @@ function feeProviderInteractiveSeries(): Series {
   };
 }
 
-// --- 系列: Determining the Locktime の各経路 ---
+// --- Series: the branches of Determining the Locktime ---
 
 interface LocktimeSpec {
   id: string;
@@ -839,7 +842,7 @@ function locktimeSeries(spec: LocktimeSpec): Series {
     outputMaps(outs, true),
   );
 
-  // Input Finalizer: required locktime フィールドは Extractor のために保持する
+  // Input Finalizer: the required locktime fields are preserved for the Extractor
   const scriptSig = tapyrus.script.compile([sig, pubkey(0)]);
   const finalized = pstt(
     globalPairs(),
@@ -879,7 +882,7 @@ function locktimeSeries(spec: LocktimeSpec): Series {
   };
 }
 
-// --- 系列定義 ---
+// --- Series definitions ---
 
 const fundingTPC = () => buildFundingTx(0xaa, 100000, p2pkhScript(0));
 
@@ -970,7 +973,7 @@ const series: Series[] = [
   }),
 ];
 
-// --- 出力 ---
+// --- Output ---
 
 const out = path.join(__dirname, '..', 'valid.json');
 fs.writeFileSync(out, JSON.stringify(series, null, 2) + '\n');

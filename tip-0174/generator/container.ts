@@ -1,9 +1,9 @@
-// TIP-174 PSTT コンテナの組み立てを行う低レベルヘルパである。
-// 仕様: tips/tip-0174.md の Specification 章に従う。
+// Low-level helpers that assemble TIP-174 PSTT containers.
+// Follows the Specification section of tips/tip-0174.md.
 
 export const MAGIC = Buffer.from('70737474ff', 'hex'); // "pstt" + 0xFF
 
-// フィールド型値（tip-0174.md の各テーブルと一致させる）
+// Field type values (kept in sync with the tables in tip-0174.md)
 export const GLOBAL = {
   XPUB: 0x01,
   TX_FEATURES: 0x02,
@@ -80,7 +80,7 @@ export function i64le(n: number | bigint): Buffer {
   return b;
 }
 
-// 1レコード: <keylen> <keytype> <keydata> <valuelen> <valuedata>
+// One record: <keylen> <keytype> <keydata> <valuelen> <valuedata>
 export function keypair(
   type: number,
   keydata: Buffer | null,
@@ -97,8 +97,8 @@ export function keypair(
   ]);
 }
 
-// keydata/valuelen は通常どおりだが、<keytype> だけ非最小エンコーディングの
-// compact size で書く(最小エンコーディング違反ベクタ用)。
+// keydata and valuelen are written as usual, but <keytype> alone is written as a
+// non-minimally encoded compact size (for the minimal-encoding violation vector).
 export function keypairNonMinimalType(
   type: number,
   keydata: Buffer | null,
@@ -109,7 +109,7 @@ export function keypairNonMinimalType(
     const b = Buffer.alloc(2);
     b.writeUInt16LE(type, 0);
     return b;
-  })()]); // 0xfd接頭辞の3バイト表現(値が0xfd未満でも使うため非最小)
+  })()]); // 3-byte 0xfd-prefixed form (non-minimal, since it is used even for values below 0xfd)
   return Buffer.concat([
     compactSize(typeBytes.length + kd.length),
     typeBytes,
@@ -119,12 +119,12 @@ export function keypairNonMinimalType(
   ]);
 }
 
-// 1マップ: <keypair>* 0x00
+// One map: <keypair>* 0x00
 export function map(pairs: Buffer[]): Buffer {
   return Buffer.concat([...pairs, Buffer.from([0x00])]);
 }
 
-// PSTT全体: <magic> <global-map> <input-map>* <output-map>*
+// The whole PSTT: <magic> <global-map> <input-map>* <output-map>*
 export function pstt(
   globalPairs: Buffer[],
   inputMapsPairs: Buffer[][],
@@ -138,7 +138,7 @@ export function pstt(
   ]);
 }
 
-// 最小構成のグローバルマップ（必須3フィールド）を作る。
+// Builds a minimal global map (the three required fields).
 export function minimalGlobal(
   inputCount: number,
   outputCount: number,
@@ -152,7 +152,8 @@ export function minimalGlobal(
   ];
 }
 
-// 最小構成の入力マップ（必須2フィールド）を作る。txidIntern は直列化順の32バイトである。
+// Builds a minimal input map (the two required fields).
+// txidIntern is the 32 bytes in serialization order.
 export function minimalInput(
   txidIntern: Buffer,
   vout: number,
@@ -165,7 +166,7 @@ export function minimalInput(
   ];
 }
 
-// 最小構成の出力マップ（必須2フィールド）を作る。
+// Builds a minimal output map (the two required fields).
 export function minimalOutput(
   amount: number | bigint,
   script: Buffer,
