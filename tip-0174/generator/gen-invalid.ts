@@ -1,5 +1,5 @@
-// TIP-174 の無効テストベクタ(invalid.json)を生成する。
-// 各ケースは tip-0174.md 本文の must 規定と対応する。
+// Generates the invalid test vectors (invalid.json) of TIP-174.
+// Each case corresponds to a must requirement in the body of tip-0174.md.
 
 import * as fs from 'node:fs';
 import * as path from 'node:path';
@@ -36,14 +36,15 @@ interface InvalidVector {
   };
 }
 
-// --- 共通素材 ---
+// --- Shared material ---
 
 const DUMMY_P2PKH = Buffer.from(
   '76a914000000000000000000000000000000000000000088ac',
   'hex',
 );
 
-// UTXO不一致ケース用の実トランザクション(malfix txidが計算できる正しい直列化)
+// A real transaction for the UTXO mismatch case
+// (a correct serialization whose malfix txid can be computed)
 function buildPrevTx(): tapyrus.Transaction {
   const tx = new tapyrus.Transaction();
   tx.version = 1;
@@ -52,7 +53,7 @@ function buildPrevTx(): tapyrus.Transaction {
   return tx;
 }
 
-// SINGLE署名ケース用: 構文的に妥当なDER署名 + sighashバイト
+// For the SINGLE signature case: a syntactically valid DER signature plus the sighash byte
 function dummyDerSig(hashType: number): Buffer {
   const r = Buffer.alloc(32, 0x22);
   const s = Buffer.alloc(32, 0x33);
@@ -73,7 +74,8 @@ const pubkey = tapyrus.ECPair.fromPrivateKey(Buffer.alloc(32, 0x01), {
   network: tapyrus.networks.dev,
 }).publicKey;
 
-const TXID_A = Buffer.alloc(32, 0x01); // 直列化順の宣言txid(コンテナ検査ではダミーで足りる)
+// Declared txid in serialization order (a dummy suffices for container checks)
+const TXID_A = Buffer.alloc(32, 0x01);
 
 function base(): Buffer {
   return pstt(
@@ -83,7 +85,7 @@ function base(): Buffer {
   );
 }
 
-// --- ケース定義 ---
+// --- Case definitions ---
 
 const vectors: InvalidVector[] = [];
 
@@ -102,7 +104,7 @@ function add(
   });
 }
 
-// 1. マジック不正(BitcoinのPSBTマジック)
+// Wrong magic (the Bitcoin PSBT magic)
 {
   const b = base();
   Buffer.from('70736274', 'hex').copy(b, 0); // "psbt"
@@ -115,7 +117,7 @@ function add(
   );
 }
 
-// 2. 末尾のマップセパレータ欠落
+// Missing trailing map separator
 {
   const b = base();
   add(
@@ -127,7 +129,7 @@ function add(
   );
 }
 
-// 3. 完全キーの重複
+// Duplicate complete key
 {
   const b = pstt(
     [
@@ -148,7 +150,7 @@ function add(
   );
 }
 
-// 4. グローバル必須フィールド欠落(TX_FEATURES)
+// Missing required global field (TX_FEATURES)
 {
   const b = pstt(
     [
@@ -167,7 +169,7 @@ function add(
   );
 }
 
-// 5. 入力必須フィールド欠落(PREVIOUS_TXID)
+// Missing required input field (PREVIOUS_TXID)
 {
   const b = pstt(
     minimalGlobal(1, 1),
@@ -183,12 +185,12 @@ function add(
   );
 }
 
-// 6. 出力必須フィールド欠落(AMOUNT)
+// Missing required output field (AMOUNT)
 {
   const b = pstt(
     minimalGlobal(1, 1),
     [minimalInput(TXID_A, 0)],
-    [[keypair(0x04, null, DUMMY_P2PKH)]], // SCRIPTのみ
+    [[keypair(0x04, null, DUMMY_P2PKH)]], // SCRIPT only
   );
   add(
     'missing-output-amount',
@@ -199,10 +201,10 @@ function add(
   );
 }
 
-// 7. マップ数とカウントの不一致
+// Map count does not match the declared counts
 {
   const b = pstt(
-    minimalGlobal(2, 1), // INPUT_COUNT=2 だが入力マップは1つ
+    minimalGlobal(2, 1), // INPUT_COUNT=2 but only one input map
     [minimalInput(TXID_A, 0)],
     [minimalOutput(40000, DUMMY_P2PKH)],
   );
@@ -215,10 +217,10 @@ function add(
   );
 }
 
-// 8. UTXOのtxid不一致
+// UTXO txid mismatch
 {
   const prev = buildPrevTx();
-  const declared = Buffer.alloc(32, 0x02); // prevのmalfix txidとは異なる
+  const declared = Buffer.alloc(32, 0x02); // Differs from the malfix txid of prev
   const b = pstt(
     minimalGlobal(1, 1),
     [minimalInput(declared, 0, [keypair(INPUT.UTXO, null, prev.toBuffer())])],
@@ -233,7 +235,7 @@ function add(
   );
 }
 
-// 9. 廃止された型値0x00(グローバル未署名トランザクション)
+// Retired type value 0x00 (the global unsigned transaction)
 {
   const prev = buildPrevTx();
   const b = pstt(
@@ -250,7 +252,7 @@ function add(
   );
 }
 
-// 10. version超過
+// Version too high
 {
   const b = pstt(
     minimalGlobal(1, 1, [keypair(GLOBAL.VERSION, null, u32le(1))]),
@@ -266,7 +268,7 @@ function add(
   );
 }
 
-// 11. locktime要求の矛盾
+// Contradictory locktime requirements
 {
   const b = pstt(
     minimalGlobal(2, 1),
@@ -289,7 +291,7 @@ function add(
   );
 }
 
-// 12. 対応する出力の無い入力へのSINGLE署名
+// SIGHASH_SINGLE signature on an input with no corresponding output
 {
   const b = pstt(
     minimalGlobal(2, 1),
@@ -310,7 +312,7 @@ function add(
   );
 }
 
-// 13a. 入力必須フィールド欠落(OUTPUT_INDEX、PREVIOUS_TXIDの逆パターン)
+// Missing required input field (OUTPUT_INDEX, the counterpart of the PREVIOUS_TXID case)
 {
   const b = pstt(
     minimalGlobal(1, 1),
@@ -326,7 +328,7 @@ function add(
   );
 }
 
-// 13b. 出力必須フィールド欠落(SCRIPT、AMOUNTの逆パターン)
+// Missing required output field (SCRIPT, the counterpart of the AMOUNT case)
 {
   const b = pstt(
     minimalGlobal(1, 1),
@@ -342,7 +344,7 @@ function add(
   );
 }
 
-// 13. REQUIRED_TIME_LOCKTIME が下限未満
+// REQUIRED_TIME_LOCKTIME below the lower bound
 {
   const b = pstt(
     minimalGlobal(1, 1),
@@ -362,7 +364,7 @@ function add(
   );
 }
 
-// 14. REQUIRED_HEIGHT_LOCKTIME が上限以上
+// REQUIRED_HEIGHT_LOCKTIME at or above the upper bound
 {
   const b = pstt(
     minimalGlobal(1, 1),
@@ -382,7 +384,7 @@ function add(
   );
 }
 
-// 15. REQUIRED_HEIGHT_LOCKTIME がゼロ
+// REQUIRED_HEIGHT_LOCKTIME is zero
 {
   const b = pstt(
     minimalGlobal(1, 1),
@@ -398,7 +400,7 @@ function add(
   );
 }
 
-// 16. PSTT_GLOBAL_INPUT_COUNT 欠落
+// Missing PSTT_GLOBAL_INPUT_COUNT
 {
   const b = pstt(
     [
@@ -417,7 +419,7 @@ function add(
   );
 }
 
-// 17. PSTT_GLOBAL_OUTPUT_COUNT 欠落
+// Missing PSTT_GLOBAL_OUTPUT_COUNT
 {
   const b = pstt(
     [
@@ -436,11 +438,11 @@ function add(
   );
 }
 
-// 18. keydata が None と定義されたフィールドに余分なバイトがある
+// Extra bytes in a field whose keydata is defined as None
 {
   const b = pstt(
     [
-      keypair(GLOBAL.TX_FEATURES, Buffer.from([0xaa]), i32le(1)), // keydata は空のはず
+      keypair(GLOBAL.TX_FEATURES, Buffer.from([0xaa]), i32le(1)), // keydata should be empty
       keypair(GLOBAL.INPUT_COUNT, null, compactSize(1)),
       keypair(GLOBAL.OUTPUT_COUNT, null, compactSize(1)),
     ],
@@ -456,9 +458,9 @@ function add(
   );
 }
 
-// 19. 公開鍵の長さが不正(33/65バイトのいずれでもない)
+// Malformed public key length (neither 33 nor 65 bytes)
 {
-  const shortPubkey = pubkey.subarray(0, 32); // 33バイトのはずが32バイト
+  const shortPubkey = pubkey.subarray(0, 32); // 32 bytes where 33 are expected
   const b = pstt(
     minimalGlobal(1, 1),
     [
@@ -477,10 +479,10 @@ function add(
   );
 }
 
-// 20. redeemScript が scriptPubKey のハッシュと一致しない(P2SH)
+// The redeem script does not match the hash in the scriptPubKey (P2SH)
 {
-  const correctRedeem = Buffer.from([0x51]); // OP_1 (ダミーのredeem script)
-  const wrongRedeem = Buffer.from([0x52]); // OP_2 (ハッシュが一致しない別のscript)
+  const correctRedeem = Buffer.from([0x51]); // OP_1 (a dummy redeem script)
+  const wrongRedeem = Buffer.from([0x52]); // OP_2 (a different script whose hash does not match)
   const correctHash = tapyrus.crypto.hash160(correctRedeem);
   const p2sh = Buffer.concat([
     Buffer.from([0xa9, 0x14]), // OP_HASH160 <push 20>
@@ -511,20 +513,20 @@ function add(
   );
 }
 
-// 21. valuelen が実際に残っているバイト数より大きい
+// valuelen is larger than the number of bytes actually remaining
 {
   const scriptValue = DUMMY_P2PKH;
   const scriptTypeBytes = compactSize(OUTPUT.SCRIPT);
   const scriptRecord = Buffer.concat([
     compactSize(scriptTypeBytes.length),
     scriptTypeBytes,
-    compactSize(scriptValue.length + 1), // 実データより1バイト大きく偽る
-    scriptValue, // 主張どおりの長さには1バイト足りない
+    compactSize(scriptValue.length + 1), // Claims one byte more than the actual data
+    scriptValue, // One byte short of the claimed length
   ]);
   const outputMapBytes = Buffer.concat([
     keypair(OUTPUT.AMOUNT, null, i64le(40000)),
     scriptRecord,
-    // 0x00 終端を付けない: valuelen の主張どおりに読むとバッファ末尾を超える
+    // No 0x00 terminator: reading the claimed valuelen runs past the end of the buffer
   ]);
   const b = Buffer.concat([
     MAGIC,
@@ -541,7 +543,8 @@ function add(
   );
 }
 
-// 22. <keytype> が非最小エンコーディング(1バイトで表せる値を3バイトのcompact sizeで表す)
+// Non-minimally encoded <keytype>
+// (a value representable in one byte written as a 3-byte compact size)
 {
   const b = pstt(
     [
@@ -561,7 +564,7 @@ function add(
   );
 }
 
-// --- 出力 ---
+// --- Output ---
 
 const out = path.join(__dirname, '..', 'invalid.json');
 fs.writeFileSync(out, JSON.stringify(vectors, null, 2) + '\n');

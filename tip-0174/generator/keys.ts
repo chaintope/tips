@@ -1,5 +1,5 @@
-// テストベクタ用の決定論的な鍵材料である。
-// マスターシードは SHA256("TIP-174 test vectors") とし、フィクスチャの再現性を保証する。
+// Deterministic key material for the test vectors.
+// The master seed is SHA256("TIP-174 test vectors"), which makes the fixtures reproducible.
 
 import { createHash } from 'node:crypto';
 import * as tapyrus from 'tapyrusjs-lib';
@@ -11,7 +11,7 @@ export const SEED = createHash('sha256')
 export const root = tapyrus.bip32.fromSeed(SEED, tapyrus.networks.dev);
 export const masterFingerprint = Buffer.from(root.fingerprint);
 
-// TIP-0044 の cointype 2377 を用いる: m/44'/2377'/0'/0/i
+// Uses cointype 2377 from TIP-0044: m/44'/2377'/0'/0/i
 export function key(i: number) {
   return root.derivePath(`m/44'/2377'/0'/0/${i}`);
 }
@@ -26,7 +26,7 @@ export function pathElements(i: number): number[] {
   return [HARDENED + 44, HARDENED + 2377, HARDENED + 0, 0, i];
 }
 
-// *_BIP32_DERIVATION レコードの値: <fingerprint(4)> <u32le path element>*
+// Value of a *_BIP32_DERIVATION record: <fingerprint(4)> <u32le path element>*
 export function bip32DerivationValue(i: number): Buffer {
   const parts = [masterFingerprint];
   for (const el of pathElements(i)) {
@@ -37,11 +37,11 @@ export function bip32DerivationValue(i: number): Buffer {
   return Buffer.concat(parts);
 }
 
-// アカウントレベルの拡張公開鍵: m/44'/2377'/0'
+// Account-level extended public key: m/44'/2377'/0'
 export const account = root.derivePath("m/44'/2377'/0'").neutered();
 
-// BIP 32 の生シリアライズ(78バイト): version(4) depth(1) parentFingerprint(4)
-// childNumber(4) chainCode(32) key(33)。PSTT_GLOBAL_XPUB のキーデータそのものである。
+// Raw BIP 32 serialization (78 bytes): version(4) depth(1) parentFingerprint(4)
+// childNumber(4) chainCode(32) key(33). This is exactly the key data of PSTT_GLOBAL_XPUB.
 export function serializeXpub(node: typeof account): Buffer {
   const b = Buffer.alloc(78);
   b.writeUInt32BE(tapyrus.networks.dev.bip32.public, 0);
@@ -53,8 +53,8 @@ export function serializeXpub(node: typeof account): Buffer {
   return b;
 }
 
-// PSTT_GLOBAL_XPUB の値: <fingerprint(4)> <u32le path element>*
-// アカウントレベル鍵の導出パスは m/44'/2377'/0' の3要素のみである。
+// Value of PSTT_GLOBAL_XPUB: <fingerprint(4)> <u32le path element>*
+// The derivation path of the account-level key has only the three elements of m/44'/2377'/0'.
 export const accountFingerprint = Buffer.from(account.fingerprint);
 export function xpubDerivationValue(): Buffer {
   const parts = [masterFingerprint];

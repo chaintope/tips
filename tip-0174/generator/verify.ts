@@ -1,14 +1,18 @@
-// フィクスチャの独立検証である。container.ts の組み立てコードは使わず、
-// tip-0174.md の記述だけを根拠に書いたパーサと検証規則で invalid.json / valid.json を確かめる。
+// Independent verification of the fixtures. It does not use the assembly code in
+// container.ts; instead it checks invalid.json and valid.json with a parser and
+// validation rules written solely from the text of tip-0174.md.
 //
 //   node verify.ts
 //
-// 検証内容:
-//   - invalid.json: stage=parse は構造・静的検証で必ず失敗し、stage=rule は構造上は読めること、
-//     かつ主要なrule-stageベクタは実際にその規則へ違反していること
-//   - valid.json: 全段階が構造・静的検証を通ること、UTXOのtxid整合、識別用txidの再計算一致、
-//     TX_MODIFIABLE値の一致、sighash再計算の一致、ECDSA/Schnorr署名の検証、
-//     finalized段階から独自再構築したネットワーク直列化がextracted_txとバイト一致すること
+// What is verified:
+//   - invalid.json: every stage=parse vector must fail structural or static validation,
+//     every stage=rule vector must be structurally readable, and the main rule-stage
+//     vectors must actually violate the rule they claim to violate
+//   - valid.json: every stage passes structural and static validation, the UTXO txids are
+//     consistent, the recomputed identification txid matches, the TX_MODIFIABLE value
+//     matches, the recomputed sighash matches, the ECDSA/Schnorr signatures verify, and
+//     the network serialization independently reconstructed from the finalized stage is
+//     byte-identical to extracted_tx
 
 import * as fs from 'node:fs';
 import * as path from 'node:path';
@@ -32,7 +36,7 @@ interface Parsed {
 
 const SIGHASH_ALL = 0x01;
 
-// --- 構造パース(仕様のコンテナ形式に従う) ---
+// --- Structural parsing (follows the container format of the specification) ---
 
 function parsePstt(buf: Buffer): Parsed {
   if (buf.subarray(0, 5).toString('hex') !== '70737474ff') {
@@ -90,7 +94,7 @@ function parsePstt(buf: Buffer): Parsed {
   }
   if (maps.length === 0) throw new Error('missing global map');
 
-  // カウントに基づき入力・出力マップへ分割する
+  // Split into input and output maps according to the declared counts
   const global = maps[0];
   const ic = readCount(global, 0x04, 'PSTT_GLOBAL_INPUT_COUNT');
   const oc = readCount(global, 0x05, 'PSTT_GLOBAL_OUTPUT_COUNT');
@@ -120,10 +124,10 @@ function readCount(global: Rec[], type: number, name: string): number {
   return rec.value[0];
 }
 
-// --- 静的検証(仕様の must 規定のうち、単独のPSTTだけで判定できるもの) ---
+// --- Static validation (must requirements decidable from a single PSTT alone) ---
 
-// <keydata> が None(空)と定義されているフィールドの一覧である。
-// Specification 章の「<keydata> must have exactly the length stated」を検査する。
+// The list of fields whose <keydata> is defined as None (empty).
+// This checks "<keydata> must have exactly the length stated" from the Specification section.
 const EMPTY_KEYDATA_GLOBAL = new Set([0x02, 0x03, 0x04, 0x05, 0x06, 0xfb]);
 const EMPTY_KEYDATA_INPUT = new Set([
   0x00, 0x03, 0x04, 0x07, 0x0e, 0x0f, 0x10, 0x11, 0x12,
@@ -197,13 +201,14 @@ function staticValidate(p: Parsed): void {
     checkEmptyKeydata(output, EMPTY_KEYDATA_OUTPUT);
     checkPubkeyLength(output, 0x02, 'PSTT_OUT_BIP32_DERIVATION');
   }
-  // ロックタイムの両立可否(Determining the Locktime)は、ここでは検査しない。
-  // 本文の Signer 規則が課す義務であり、PSTT 自体の構造的な妥当性ではないため、
-  // 静的検証(parse 段階)ではなく意味検証(rule 段階)として扱う。
+  // Whether the locktimes are compatible (Determining the Locktime) is not checked here.
+  // It is an obligation imposed by the Signer rules in the body of the TIP, not part of
+  // the structural validity of the PSTT itself, so it is treated as semantic validation
+  // (the rule stage) rather than static validation (the parse stage).
 }
 
-// Determining the Locktime 章のアルゴリズムである。呼び出し側は
-// 「両立するロックタイム種別が無い」を rule 段階の失敗として扱う。
+// The algorithm of the Determining the Locktime section. The caller treats
+// "no locktime kind is acceptable" as a rule-stage failure.
 export function determineLocktime(p: Parsed): number {
   const fallback = findRec(p.global, 0x03);
   const fallbackVal = fallback ? fallback.value.readUInt32LE(0) : 0;
@@ -230,9 +235,10 @@ export function determineLocktime(p: Parsed): number {
   return Math.max(...timeReqs);
 }
 
-// --- 意味検証で使う再構築 ---
+// --- Reconstruction used by the semantic validation ---
 
-// 識別用txid: sequence を全入力 0、locktime は Determining the Locktime で計算する
+// Identification txid: the sequence of every input is 0 and the locktime is computed by
+// Determining the Locktime
 function identificationTxid(p: Parsed): string {
   const tx = new tapyrus.Transaction();
   tx.version = findRec(p.global, 0x02)!.value.readInt32LE(0);
@@ -253,8 +259,8 @@ function identificationTxid(p: Parsed): string {
   return tx.getId();
 }
 
-// Transaction Extractor 章のアルゴリズムである。finalize済み段階のPSTTから
-// ネットワーク直列化されたトランザクションを構築する。
+// The algorithm of the Transaction Extractor section. It builds the network-serialized
+// transaction from a PSTT at the finalized stage.
 function extractTransaction(p: Parsed): Buffer {
   const tx = new tapyrus.Transaction();
   tx.version = findRec(p.global, 0x02)!.value.readInt32LE(0);
@@ -280,7 +286,7 @@ function extractTransaction(p: Parsed): Buffer {
   return tx.toBuffer();
 }
 
-// --- 実行 ---
+// --- Execution ---
 
 let failures = 0;
 
@@ -291,9 +297,10 @@ function check(label: string, cond: boolean): void {
   }
 }
 
-// rule段階の各無効ベクタが「実際にその規則へ違反しているか」を確かめる関数である。
-// 構造的にparseできることを確認するだけでは、生成コードの取り違えで別の理由で
-// 無効になっていても見逃してしまうため、ここで規則そのものを再検証する。
+// The following helper and checks confirm that each rule-stage invalid vector really does
+// violate the rule it claims to. Merely confirming that it parses structurally would let
+// a mistake in the generator slip through when the vector is invalid for some other
+// reason, so the rules themselves are re-verified here.
 function extractP2shHash(script: Buffer): Buffer {
   // OP_HASH160 <push 20> <hash> OP_EQUAL
   if (script.length !== 23 || script[0] !== 0xa9 || script[1] !== 0x14 || script[22] !== 0x87) {
@@ -369,9 +376,10 @@ for (const id of Object.keys(RULE_VIOLATION_CHECKS)) {
   check(`invalid/${id}: vector is present`, invalid.some((v: { id: string }) => v.id === id));
 }
 
-// このTIPが定義する型値の一覧である(予約されているだけの値も、認識はしている
-// という意味で「既知」に含める)。ここに無い型値は「未知」であり、Roles章の
-// 各規則により、一度出現したら以後の段階でも保持されなければならない。
+// The list of type values this TIP defines (values that are merely reserved are also
+// counted as "known", in the sense that they are recognized). A type value not listed
+// here is "unknown" and, by the rules of the Roles section, must be preserved in every
+// later stage once it has appeared.
 const KNOWN_GLOBAL_TYPES = new Set([0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0xfb, 0xfc]);
 const KNOWN_INPUT_TYPES = new Set([
   0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09,
@@ -379,8 +387,9 @@ const KNOWN_INPUT_TYPES = new Set([
 ]);
 const KNOWN_OUTPUT_TYPES = new Set([0x00, 0x01, 0x02, 0x03, 0x04, 0xfc]);
 
-// 未知レコードの追跡: マップの種類・位置・完全キーごとに、最初に見た値を覚えておき、
-// 以後の段階で同じ完全キーのレコードが消えたり値が変わったりしていないか確認する。
+// Tracking of unknown records: for each map kind, position and complete key, remember the
+// value first seen, then check in later stages that the record with the same complete key
+// has neither disappeared nor changed its value.
 type UnknownTracker = Map<string, string>; // "kind:index:type:keydataHex" -> valueHex
 
 function trackUnknown(
@@ -468,7 +477,7 @@ for (const s of valid) {
         tm !== undefined && tm.value[0] === st.tx_modifiable,
       );
     }
-    // UTXO整合: hashMalFix と PREVIOUS_TXID の一致
+    // UTXO consistency: hashMalFix must equal PREVIOUS_TXID
     for (let k = 0; k < p.inputs.length; k++) {
       const utxo = findRec(p.inputs[k], 0x00);
       if (!utxo) continue;
@@ -486,14 +495,16 @@ for (const s of valid) {
   const finalTx = tapyrus.Transaction.fromHex(s.extracted_tx);
   check(`valid/${s.id}: final txid`, finalTx.getId() === s.final_txid);
 
-  // Transaction Extractor: 最終(finalized)段階のPSTTから独自に再構築したネットワーク
-  // 直列化が、フィクスチャの extracted_tx とバイト単位で一致することを確かめる。
+  // Transaction Extractor: confirm that the network serialization independently
+  // reconstructed from the PSTT at the finalized stage is byte-for-byte identical to the
+  // extracted_tx of the fixture.
   check(
     `valid/${s.id}: extracted_tx matches independent reconstruction from the finalized stage`,
     extractTransaction(lastParsed).toString('hex') === s.extracted_tx,
   );
 
-  // 署名検証: PARTIAL_SIG を最も多く含む最後の段階を intermediates と突き合わせる
+  // Signature verification: match the last stage that carries PARTIAL_SIG records
+  // against intermediates
   if (!s.intermediates) continue;
   let sigStage: Parsed | null = null;
   for (const st of s.stages) {
@@ -501,7 +512,7 @@ for (const s of valid) {
       const p = parsePstt(Buffer.from(st.pstt, 'base64'));
       if (p.inputs.some(recs => recs.some(r => r.type === 0x02))) sigStage = p;
     } catch {
-      // 構造エラーは段階ループで既に報告済みである
+      // Structural errors have already been reported by the stage loop
     }
   }
   if (!sigStage) {
@@ -513,8 +524,8 @@ for (const s of valid) {
     const input = sigStage.inputs[im.input];
     const hashType = im.sighash_type ?? SIGHASH_ALL;
     const scriptCode = Buffer.from(im.script_code, 'hex');
-    // 最終txから再計算する。ANYONECANPAY の場合、入力追加前に作られた署名の
-    // sighash と一致することが、この再計算によって同時に確かめられる。
+    // Recompute it from the final transaction. For ANYONECANPAY, this recomputation also
+    // confirms that it matches the sighash of a signature made before the input was added.
     const sighash = finalTx.hashForSignature(im.input, scriptCode, hashType);
     check(`${label} sighash`, sighash.toString('hex') === im.sighash);
     const wantPub = Buffer.from(im.pubkey, 'hex');

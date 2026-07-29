@@ -1,17 +1,19 @@
-// Tapyrus の Schnorr 署名方式である(BIP340 ではない)。
-// アルゴリズムタグの厳密な値は、tapyrus-core が実際に署名に用いる C 実装
-// (同梱の libsecp256k1 フォーク chaintope/secp256k1 の
-// src/modules/schnorr/main_impl.h にある secp256k1_schnorr_sign)で確認した:
+// The Tapyrus Schnorr signature scheme (not BIP340).
+// The exact value of the algorithm tag was confirmed against the C implementation
+// that tapyrus-core actually signs with (secp256k1_schnorr_sign in
+// src/modules/schnorr/main_impl.h of the bundled libsecp256k1 fork
+// chaintope/secp256k1):
 // https://github.com/chaintope/secp256k1/blob/master/src/modules/schnorr/main_impl.h
-//   - ノンスは RFC6979(HMAC-DRBG)。keydata = key32 || msg32 || algo16 であり、
-//     algo16 = "SCHNORR + SHA256"(スペース込み16バイト、パディング無し)
-//   - R の y 座標が平方剰余(Jacobi 記号 1)になるようノンスの符号を調整する
-//   - e = SHA256(Rx(32) || 圧縮公開鍵P(33) || msg(32)) mod n
-//   - 署名は Rx(32) || s(32) の 64 バイト
+//   - The nonce is RFC6979 (HMAC-DRBG). keydata = key32 || msg32 || algo16, where
+//     algo16 = "SCHNORR + SHA256" (exactly 16 bytes including the spaces, no padding)
+//   - The sign of the nonce is adjusted so that the y coordinate of R is a quadratic
+//     residue (Jacobi symbol 1)
+//   - e = SHA256(Rx(32) || compressed public key P(33) || msg(32)) mod n
+//   - The signature is the 64 bytes Rx(32) || s(32)
 //
-// 自己検証(sign→verify)はノンス導出アルゴリズム自体の誤りを検出できない
-// (verify() は R' = sG - eP を計算するだけでノンスタグに依存しないため)。
-// 既知解との突き合わせが必須である。
+// Self-verification (sign then verify) cannot detect an error in the nonce derivation
+// algorithm itself (verify() only computes R' = sG - eP and does not depend on the
+// nonce tag). Cross-checking against known answers is therefore mandatory.
 
 import { createHash, createHmac } from 'node:crypto';
 
@@ -28,7 +30,7 @@ const GY = BigInt(
   '0x483ada7726a3c4655da4fbfc0e1108a8fd17b448a68554199c47d08ffb10d4b8',
 );
 
-type Point = { x: bigint; y: bigint } | null; // null = 無限遠点
+type Point = { x: bigint; y: bigint } | null; // null = point at infinity
 
 function mod(a: bigint, m: bigint): bigint {
   const r = a % m;
@@ -48,7 +50,7 @@ function powmod(base: bigint, exp: bigint, m: bigint): bigint {
 }
 
 function inv(a: bigint, m: bigint): bigint {
-  return powmod(a, m - 2n, m); // m は素数
+  return powmod(a, m - 2n, m); // m is prime
 }
 
 function pointAdd(a: Point, b: Point): Point {
@@ -107,9 +109,9 @@ function decompress(pub: Buffer): { x: bigint; y: bigint } {
   return { x, y };
 }
 
-// libsecp256k1 の nonce_function_rfc6979 と同じ手順である。
+// Same procedure as nonce_function_rfc6979 in libsecp256k1.
 // keydata = key32 || msg32 || algo16
-// "SCHNORR + SHA256" は ASCII で 16 バイトちょうどであり、パディングは不要である。
+// "SCHNORR + SHA256" is exactly 16 bytes in ASCII, so no padding is needed.
 const ALGO16 = Buffer.from('SCHNORR + SHA256', 'ascii');
 
 function rfc6979Nonce(key32: Buffer, msg32: Buffer): bigint {
@@ -142,7 +144,7 @@ function challenge(rx: Buffer, pubCompressed: Buffer, msg32: Buffer): bigint {
   return mod(bufToBig(e), N);
 }
 
-// 署名: Rx(32) || s(32) の 64 バイトを返す。
+// Signing: returns the 64 bytes Rx(32) || s(32).
 export function sign(priv32: Buffer, msg32: Buffer): Buffer {
   const d = bufToBig(priv32);
   if (d <= 0n || d >= N) throw new Error('invalid private key');
@@ -158,7 +160,7 @@ export function sign(priv32: Buffer, msg32: Buffer): Buffer {
   return Buffer.concat([rx, bigTo32(s)]);
 }
 
-// 検証: R' = sG - eP を計算し、R'.y が平方剰余かつ R'.x == r を確認する。
+// Verification: computes R' = sG - eP and checks that R'.y is a quadratic residue and R'.x == r.
 export function verify(pub33: Buffer, msg32: Buffer, sig64: Buffer): boolean {
   if (sig64.length !== 64) return false;
   const r = bufToBig(sig64.subarray(0, 32));
@@ -171,16 +173,17 @@ export function verify(pub33: Buffer, msg32: Buffer, sig64: Buffer): boolean {
   return isQuadRes(Rp.y) && Rp.x === r;
 }
 
-// tapyrus-core 自身の C++ 単体テスト src/test/key_tests.cpp の決定論的 Schnorr 署名
-// テストにある既知解ベクタである。同テストは C 実装 secp256k1_schnorr_sign を
-// 検証しており、ノードが実際に署名する経路そのものである。
+// Known-answer vectors taken from the deterministic Schnorr signature test in
+// tapyrus-core's own C++ unit test src/test/key_tests.cpp. That test exercises the C
+// implementation secp256k1_schnorr_sign, which is the very path a node signs with.
 //
-// sign() が本物の Tapyrus Schnorr 実装と一致することの唯一の根拠であり、
-// 自己検証(sign→verify)では代替できない。この実装の出力から作り直してはならない。
-// モジュール読み込み時に検証し、不一致なら例外を投げる。
+// They are the only evidence that sign() matches the real Tapyrus Schnorr
+// implementation, and self-verification (sign then verify) is no substitute for them.
+// They must never be regenerated from the output of this implementation.
+// They are checked when the module is loaded, and a mismatch throws.
 //
-// メッセージは key_tests.cpp と同じく Hash("Very deterministic message")
-// すなわち ASCII 文字列の SHA256d である。
+// The message is Hash("Very deterministic message") as in key_tests.cpp, that is,
+// the SHA256d of the ASCII string.
 const KAT_MSG = createHash('sha256')
   .update(
     createHash('sha256').update('Very deterministic message', 'ascii').digest(),
